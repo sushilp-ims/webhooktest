@@ -164,6 +164,7 @@ app.get("/profile", (req, res) => {
   let token = req.query["verify_token"];
   let mode = req.query["mode"];
 
+  console.log (config.webhookUrl);
   if (!config.webhookUrl.startsWith("https://")) {
     res.status(200).send("ERROR - Need a proper API_URL in the .env file");
   }
