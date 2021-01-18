@@ -35,6 +35,10 @@ app.post('/webhook', (req, res) => {
   
   });
 
+  app.get('/', (req, res) => {
+    res.status(200).send('You are connected to the chatbot application.');
+  })
+
   app.get('/webhook', (req, res) => {
 
     // Your verify token. Should be a random string.
@@ -57,10 +61,12 @@ app.post('/webhook', (req, res) => {
       
       } else {
         // Responds with '403 Forbidden' if verify tokens do not match
+        console.log ('adfaf');
         res.sendStatus(403);      
       }
     }
   });
 
+  console.log(process.env.PORT);
   // Sets server port and logs message on success
 app.listen(process.env.PORT || 1337, () => console.log('webhook is listening'));
