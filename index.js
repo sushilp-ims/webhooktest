@@ -1,269 +1,530 @@
-/**
- * Copyright 2019-present, Facebook, Inc. All rights reserved.
- *
- * This source code is licensed under the BSD-style license found in the
- * LICENSE file in the root directory of this source tree.
- *
- * Messenger For Original Coast Clothing
- * https://developers.facebook.com/docs/messenger-platform/getting-started/sample-apps/original-coast-clothing
- */
-
-"use strict";
+'use strict';
 
 // Imports dependencies and set up http server
-const express = require("express"),
-  { urlencoded, json } = require("body-parser"),
-  crypto = require("crypto"),
-  path = require("path"),
-  Receive = require("./services/receive"),
-  GraphAPi = require("./services/graph-api"),
-  User = require("./services/user"),
-  config = require("./services/config"),
-  i18n = require("./i18n.config"),
-  app = express();
+const
+  express = require('express'),
+  bodyParser = require('body-parser'),
+  app = express().use(bodyParser.json()), // creates express http server
+  dotenv = require('dotenv'),
+  request = require('request');
+  global.fetch = require("node-fetch");
 
-var users = {};
+dotenv.config();
+const PAGE_ACCESS_TOKEN = "EAALy3r77bioBAJTLXWmP4duPQNaeLbHVc6NMTMLJPCmgzfTZCuBUF1i3sl5cauWo1V1UQCxqdUhQYimjuAt6GtKaw5fWtHieMveWwaoz99f1ExWIxPLzp1TWpd0g3YRwyPAcfkFCHqBsr2lv2410q1TbbFQjPbQUvkFbb5aGf5Fc0kUP0";
 
-// Parse application/x-www-form-urlencoded
-app.use(
-  urlencoded({
-    extended: true
-  })
-);
+// Sets server port and logs message on success
+const listener = app.listen(process.env.PORT || 1337, () => console.log('webhook is listening on port ' + listener.address().port));
 
-// Parse application/json. Verify that callback came from Facebook
-app.use(json({ verify: verifyRequestSignature }));
+/*
+  Mock data in database (remove if database is implemented)
+*/
+let products = [
+  {
+    pid: 123,
+    title: 'Chocolate Chip Cookies',
+    pattern: 'Box of 6',
+    price: 15.5,
+    image_link: 'https://raw.githubusercontent.com/ngrq123/bright-chatbot-tutorial/main/images/chocolate_chip_cookies.jpg'
+  },
+  {
+    pid: 456,
+    title: 'Earl Grey Sunflower Seeds Cookies',
+    pattern: 'Box of 9',
+    price: 18.5,
+    image_link: 'https://raw.githubusercontent.com/ngrq123/bright-chatbot-tutorial/main/images/earl_grey_sunflower_seeds_cookies.jpg'
+  }
+]
 
-// Serving static files in Express
-app.use(express.static(path.join(path.resolve(), "public")));
+let cart = [
+  {
+    pid: 123,
+    title: 'Chocolate Chip Cookies',
+    pattern: 'Box of 6',
+    price: 15.5,
+    quantity: 1,
+    image_link: 'https://raw.githubusercontent.com/ngrq123/bright-chatbot-tutorial/main/images/chocolate_chip_cookies.jpg'
+  },
+  {
+    pid: 456,
+    title: 'Earl Grey Sunflower Seeds Cookies',
+    pattern: 'Box of 9',
+    price: 18.5,
+    quantity: 2,
+    image_link: 'https://raw.githubusercontent.com/ngrq123/bright-chatbot-tutorial/main/images/earl_grey_sunflower_seeds_cookies.jpg'
+  }
+]
 
-// Set template engine in Express
-app.set("view engine", "ejs");
+let order = [
+  {
+    pid: 123,
+    title: 'Chocolate Chip Cookies',
+    pattern: 'Box of 6',
+    price: 15.5,
+    quantity: 1,
+    image_link: 'https://raw.githubusercontent.com/ngrq123/bright-chatbot-tutorial/main/images/chocolate_chip_cookies.jpg'
+  },
+  {
+    pid: 456,
+    title: 'Earl Grey Sunflower Seeds Cookies',
+    pattern: 'Box of 9',
+    price: 18.5,
+    quantity: 2,
+    image_link: 'https://raw.githubusercontent.com/ngrq123/bright-chatbot-tutorial/main/images/earl_grey_sunflower_seeds_cookies.jpg'
+  }
+]
+/*
+  End of mock data in database (remove if database is implemented)
+*/
 
-// Respond with index file when a GET request is made to the homepage
-app.get("/", function(_req, res) {
-  res.render("index");
-});
+app.get('/', (req, res) => {
+  res.status(200).send('You are connected to the chatbot application.');
+})
 
 // Adds support for GET requests to our webhook
-app.get("/webhook", (req, res) => {
+app.get('/webhook', (req, res) => {
+  
+  // Your verify token. Should be a random string.
+  let VERIFY_TOKEN = "sushil_visual";
+  
   // Parse the query params
-  let mode = req.query["hub.mode"];
-  let token = req.query["hub.verify_token"];
-  let challenge = req.query["hub.challenge"];
-
+  let mode = req.query['hub.mode'];
+  let token = req.query['hub.verify_token'];
+  let challenge = req.query['hub.challenge'];
+  
   // Checks if a token and mode is in the query string of the request
   if (mode && token) {
+    
     // Checks the mode and token sent is correct
-    if (mode === "subscribe" && token === config.verifyToken) {
+    if (mode === 'subscribe' && token === VERIFY_TOKEN) {
+      
       // Responds with the challenge token from the request
-      console.log("WEBHOOK_VERIFIED");
+      console.log('WEBHOOK_VERIFIED');
       res.status(200).send(challenge);
+      
     } else {
       // Responds with '403 Forbidden' if verify tokens do not match
-      res.sendStatus(403);
+      res.sendStatus(403);      
     }
   }
 });
 
-// Creates the endpoint for your webhook
-app.post("/webhook", (req, res) => {
+// Creates the endpoint for our webhook 
+app.post('/webhook', (req, res) => {  
+  
   let body = req.body;
-
-  // Checks if this is an event from a page subscription
-  if (body.object === "page") {
-    // Returns a '200 OK' response to all requests
-    res.status(200).send("EVENT_RECEIVED");
-
+  
+  // Checks this is an event from a page subscription
+  if (body.object === 'page') {
+    
     // Iterates over each entry - there may be multiple if batched
-    body.entry.forEach(function(entry) {
-      if ("changes" in entry) {
-        // Handle Page Changes event
-        let receiveMessage = new Receive();
-        if (entry.changes[0].field === "feed") {
-          let change = entry.changes[0].value;
-          switch (change.item) {
-            case "post":
-              return receiveMessage.handlePrivateReply(
-                "post_id",
-                change.post_id
-              );
-            case "comment":
-              return receiveMessage.handlePrivateReply(
-                "comment_id",
-                change.comment_id
-              );
-            default:
-              console.log("Unsupported feed change type.");
-              return;
-          }
+    body.entry.forEach(async function(entry) {
+      
+      // Gets the message. entry.messaging is an array, but 
+      // will only ever contain one message, so we get index 0
+      let webhook_event = entry.messaging[0];
+      console.log(webhook_event);
+
+      let sender_psid = webhook_event['sender']['id'];
+
+      let response = getDefaultResponse();
+      if (webhook_event['message']) {
+        let message = webhook_event['message']['text'];
+        console.log('Message received from sender ' + sender_psid + ' : ' + message);
+        
+        if (webhook_event['message']['quick_reply']) {
+          let payload = webhook_event['message']['quick_reply']['payload'];
+          response = await processPayload(sender_psid, payload);
+        } else {
+          let nlp = webhook_event['message']['nlp'];
+          response = await processMessage(sender_psid, message, nlp);
         }
+      } else if (webhook_event['postback']) {
+        let payload = webhook_event['postback']['payload'];
+        response = await processPayload(sender_psid, payload);
       }
-
-      // Gets the body of the webhook event
-      let webhookEvent = entry.messaging[0];
-      // console.log(webhookEvent);
-
-      // Discard uninteresting events
-      if ("read" in webhookEvent) {
-        // console.log("Got a read event");
-        return;
-      }
-
-      if ("delivery" in webhookEvent) {
-        // console.log("Got a delivery event");
-        return;
-      }
-
-      // Get the sender PSID
-      let senderPsid = webhookEvent.sender.id;
-
-      if (!(senderPsid in users)) {
-        let user = new User(senderPsid);
-
-        GraphAPi.getUserProfile(senderPsid)
-          .then(userProfile => {
-            user.setProfile(userProfile);
-          })
-          .catch(error => {
-            // The profile is unavailable
-            console.log("Profile is unavailable:", error);
-          })
-          .finally(() => {
-            users[senderPsid] = user;
-            i18n.setLocale(user.locale);
-            console.log(
-              "New Profile PSID:",
-              senderPsid,
-              "with locale:",
-              i18n.getLocale()
-            );
-            let receiveMessage = new Receive(users[senderPsid], webhookEvent);
-            return receiveMessage.handleMessage();
-          });
-      } else {
-        i18n.setLocale(users[senderPsid].locale);
-        console.log(
-          "Profile already exists PSID:",
-          senderPsid,
-          "with locale:",
-          i18n.getLocale()
-        );
-        let receiveMessage = new Receive(users[senderPsid], webhookEvent);
-        return receiveMessage.handleMessage();
-      }
+      
+      callSendAPI(sender_psid, response);
     });
+    
+    // Returns a '200 OK' response to all requests
+    res.status(200).send('EVENT_RECEIVED');
   } else {
     // Returns a '404 Not Found' if event is not from a page subscription
     res.sendStatus(404);
   }
+  
 });
 
-// Set up your App's Messenger Profile
-app.get("/profile", (req, res) => {
-  let token = req.query["verify_token"];
-  let mode = req.query["mode"];
+// Sends response messages via the Send API
+function callSendAPI(sender_psid, response) {
 
-  console.log (config.webhookUrl);
-  if (!config.webhookUrl.startsWith("https://")) {
-    res.status(200).send("ERROR - Need a proper API_URL in the .env file");
-  }
-  var Profile = require("./services/profile.js");
-  Profile = new Profile();
+  // Construct the message body
+  let request_body = {
+      messaging_type: 'RESPONSE',
+      recipient: {
+          id: sender_psid
+      },
+      message: response
+  };
 
-  // Checks if a token and mode is in the query string of the request
-  if (mode && token) {
-    if (token === "sushil_visual") {
-      if (mode == "webhook" || mode == "all") {
-        Profile.setWebhook();
-        res.write(
-          `<p>Set app ${config.appId} call to ${config.webhookUrl}</p>`
-        );
-      }
-      if (mode == "profile" || mode == "all") {
-        Profile.setThread();
-        res.write(`<p>Set Messenger Profile of Page ${config.pageId}</p>`);
-      }
-      if (mode == "personas" || mode == "all") {
-        Profile.setPersonas();
-        res.write(`<p>Set Personas for ${config.appId}</p>`);
-        res.write(
-          "<p>To persist the personas, add the following variables \
-          to your environment variables:</p>"
-        );
-        res.write("<ul>");
-        res.write(`<li>PERSONA_BILLING = ${config.personaBilling.id}</li>`);
-        res.write(`<li>PERSONA_CARE = ${config.personaCare.id}</li>`);
-        res.write(`<li>PERSONA_ORDER = ${config.personaOrder.id}</li>`);
-        res.write(`<li>PERSONA_SALES = ${config.personaSales.id}</li>`);
-        res.write("</ul>");
-      }
-      if (mode == "nlp" || mode == "all") {
-        GraphAPi.callNLPConfigsAPI();
-        res.write(`<p>Enable Built-in NLP for Page ${config.pageId}</p>`);
-      }
-      if (mode == "domains" || mode == "all") {
-        Profile.setWhitelistedDomains();
-        res.write(`<p>Whitelisting domains: ${config.whitelistedDomains}</p>`);
-      }
-      if (mode == "private-reply") {
-        Profile.setPageFeedWebhook();
-        res.write(`<p>Set Page Feed Webhook for Private Replies.</p>`);
-      }
-      res.status(200).end();
-    } else {
-      // Responds with '403 Forbidden' if verify tokens do not match
-      res.sendStatus(403);
-    }
-  } else {
-    // Returns a '404 Not Found' if mode or token are missing
-    res.sendStatus(404);
-  }
-});
+  // console.log(request_body);
 
-// Verify that the callback came from Facebook.
-function verifyRequestSignature(req, res, buf) {
-  var signature = req.headers["x-hub-signature"];
-
-  if (!signature) {
-    console.log("Couldn't validate the signature.");
-  } else {
-    var elements = signature.split("=");
-    var signatureHash = elements[1];
-    var expectedHash = crypto
-      .createHmac("sha1", config.appSecret)
-      .update(buf)
-      .digest("hex");
-    if (signatureHash != expectedHash) {
-      throw new Error("Couldn't validate the request signature.");
-    }
-  }
+  // Send the HTTP request to the Messenger Platform
+  request(
+      {
+        uri: "https://graph.facebook.com/v9.0/me/messages",
+        qs: { access_token: "EAALy3r77bioBAJTLXWmP4duPQNaeLbHVc6NMTMLJPCmgzfTZCuBUF1i3sl5cauWo1V1UQCxqdUhQYimjuAt6GtKaw5fWtHieMveWwaoz99f1ExWIxPLzp1TWpd0g3YRwyPAcfkFCHqBsr2lv2410q1TbbFQjPbQUvkFbb5aGf5Fc0kUP0" },
+        method: "POST",
+        json: request_body
+      },
+      (err, res, body) => {
+          if (!err) {
+              console.log("Message sent!");
+          } else {
+              console.error("Unable to send message: " + err);
+          }
+      }
+  );
 }
 
-// Check if all environment variables are set
-config.checkEnvVariables();
+// Wrapper method to convert text message string to response object, and sends the message
+function getResponseFromMessage(message) {
+  const response = {
+      text: message
+  };
 
-// listen for requests :)
-var listener = app.listen(config.port, function() {
-  console.log("Your app is listening on port " + listener.address().port);
+  return response;
+}
 
-  if (
-    Object.keys(config.personas).length == 0 &&
-    config.appUrl &&
-    config.verifyToken
-  ) {
-    console.log(
-      "Is this the first time running?\n" +
-        "Make sure to set the both the Messenger profile, persona " +
-        "and webhook by visiting:\n" +
-        config.appUrl +
-        "/profile?mode=all&verify_token=" +
-        config.verifyToken
-    );
+function getDefaultResponse() {
+  return getResponseFromMessage("We could not understand your message. Kindly rephrase your message and send us again.");
+}
+
+// Processes and sends text message
+async function processMessage(sender_psid, message, nlp) {
+  
+  if (nlp['intents'].length === 0) {
+    
+    // Check if greeting
+    let traits = nlp['traits'];
+
+    if (traits['wit$greetings'] && traits['wit$greetings'][0]['value'] === 'true') {
+      console.log('Is greeting');
+      // Add the getName function call here
+      let name = await getName(PAGE_ACCESS_TOKEN,sender_psid);
+      return getResponseFromMessage('Hi ' + name + '! Welcome to Bright. How can I help you?');
+    }
+    
+    console.log('Returning default response');
+    return getDefaultResponse();
   }
 
-  if (config.pageId) {
-    console.log("Test your app by messaging:");
-    console.log("https://m.me/" + config.pageId);
+  console.log('Intents inferred from NLP model: ')
+  console.table(nlp['intents']);
+
+  // Get the intent with the highest confidence
+  let intent = nlp['intents'][0]['name']
+  let confidence = nlp['intents'][0]['confidence']
+
+  // If confidence of intent is less than threshold, do not process
+  if (confidence < 0.7) return getDefaultResponse();
+
+  let entities = nlp['entities'];
+  let highest_confidence = 0;
+
+  switch (intent) {
+    case 'enquiry_general':
+      // Get entity with highest confidence
+      let entity = null;
+      for (const e in entities) {
+        let confidence = entities[e][0]['confidence'];
+        if (confidence > highest_confidence) {
+          highest_confidence = confidence;
+          entity = entities[e][0]['name'];
+        }
+      }
+
+      console.log('Entity with highest confidence: ' + entity);
+
+      return handleGeneralEnquiry(entity);
+    case 'enquiry_delivery':
+      // Get value with highest confidence
+      let value = null;
+      if ('wit$datetime:datetime' in entities) {
+        for (const e of entities['wit$datetime:datetime']) {
+          console.log(e);
+          let confidence = e['confidence'];
+          if (confidence > highest_confidence) {
+            highest_confidence = confidence;
+            // Type is either "value" or "interval"
+            value = (e['type'] === 'value') ? e['value'] : e['to']['value'];
+          }
+        }
+        console.log('Value with highest confidence: ' + value);
+      }
+      
+      return handleDeliveryEnquiry(value);
+    case 'recommendation':
+      // For Option 1 only: Get products from database and assign it to a variable named "products"
+
+      return generateCarouselOfProductsResponse(products);
+
+    default:
+      return getDefaultResponse();
   }
-});
+
+}
+
+function handleGeneralEnquiry(entity) {
+
+  if (entity == null) return getDefaultResponse();
+
+  let responses = {
+    organisation: "Bright is a social enterprise where we provide vocational training to adults with intellectual disabilities.\n\n" +
+        "We started a range of social enterprise projects to provide alternative work engagement opportunities for our adult trainees. " + 
+        "Some of the projects began as therapy programmes which encourage the development of fine motor skills; others provide a realistic vocational training environment.\n\n" +
+        "All net revenue earned from the sale of our products and services go towards paying a monthly allowance for our clients' work, as well as their lunch expenses while undergoing training.",
+    profit:
+        "All net revenue earned from the sale of our products and services go towards paying a monthly allowance for our clients' work, as well as their lunch expenses while undergoing training.",
+    manufacturer:
+        "We support adults with intellectual disabilities. We started a range of social enterprise projects to provide alternative work engagement for our adult trainees.",
+    products: "We sell craft and baker goods.\nLike our Facebook page http://fb.me/brightsocialsg to stay updated!",
+    safety: "Our cookies are made by our clients in a clean and sanitised environment. The cookies are safe to consume before the expiry date that is printed on the packaging."
+  };
+  
+  return getResponseFromMessage(responses[entity]);
+}
+
+function handleDeliveryEnquiry(value) {
+  if (value == null) return getResponseFromMessage('We deliver islandwide. The average delivery time takes 5-7 days.');
+
+  // Get days between now and date time value and round up
+  let days = ((new Date(value)) - Date.now()) / (1000 * 60 * 60 * 24);
+  days = Math.ceil(days);
+
+  let message = 'The average delivery time takes 5-7 days.';
+  if (days < 5) {
+    message = 'It is unlikely to arrive in ' + days + ' days. ' + message;
+  } else if (days < 7) {
+    message = 'It may arrive in ' + days + ' days. ' + message;
+  } else {
+    message = 'It is likely to arrive in ' + days + ' days. ' + message;
+  }
+
+  return getResponseFromMessage(message);
+}
+
+function generateCarouselOfProductsResponse(products) {
+  
+  return {
+    "attachment": {
+      "type": "template",
+      "payload": {
+        "template_type": "generic",
+        "elements":
+        products.map(p => {
+          let subtitle = '$' + p['price'].toFixed(2);
+          if (p['pattern']) {
+            subtitle = '(' + p['pattern'] + ') ' + subtitle;
+          }
+
+          return {
+            title: p['title'],
+            subtitle: subtitle,
+            image_url: p['image_link'],
+            buttons: [
+              {
+                type: "postback",
+                title: "Learn more",
+                payload: `enquiry_product ${p['title']}`
+              }, 
+              {
+                type: "postback",
+                title: `Add to cart`,
+                payload: `cart_add 1 ${p['pid']} ${p['title']}`
+              }
+            ]
+          }
+        })
+      }
+    }
+  }
+
+}
+
+async function processPayload(sender_psid, payload) {
+  let payload_parts = payload.split(' ');
+  // console.log(payload_parts);
+  let intent = payload_parts.shift();
+  
+  switch(intent) {
+    case 'cart_add':
+      // Example of payload: cart_add 1 123 Earl Grey Sunflower Seeds Cookies
+      let quantity = payload_parts.shift();
+      let pid = payload_parts.shift();
+      let product_name = payload_parts.join(' ');
+      
+      // For Option 1 only: Update cart in database
+
+      return generateAddCartQuickRepliesResponse('Added ' + quantity + ' ' + product_name + ' to cart.');
+    case 'recommendation':
+      // For Option 1 only: Get products from database and assign it to a variable named "products"
+
+      return generateCarouselOfProductsResponse(products);
+    case 'cart_view':
+      // For Option 1 only: Get cart from database and assign it to a variable named "cart"
+
+      return generateCartResponse(cart);
+    case 'checkout':
+      // For Option 1 only: Get order from database and assign it to a variable named "order"
+
+      // For Option 1 only: Add to order and delete cart from database
+
+      return generateCheckoutResponse(order);
+    case 'paid':
+      // For Option 1 only: Get latest order from database and assign it to a variable named "order"
+
+      return await generateReceiptResponse(sender_psid, order);
+    default:
+      return getDefaultResponse();
+  }
+
+}
+
+function generateAddCartQuickRepliesResponse(message) {
+  return {
+    "text": message,
+    "quick_replies": [
+      {
+        "content_type": "text",
+        "title": "Checkout",
+        "payload": "checkout"
+      },
+      {
+        "content_type": "text",
+        "title": "View more products",
+        "payload": "recommendation"
+      }, {
+        "content_type": "text",
+        "title": 'View cart',
+        "payload": "cart_view"
+      }
+    ]
+  }
+
+}
+
+function generateCartResponse(cart) {
+
+  return {
+    "attachment": {
+      "type": "template",
+      "payload": {
+        "template_type": "generic",
+        "elements":
+        cart.map(p => {
+          let subtitle = 'Qty: ' + p['quantity'] + ' ($' + p['price'].toFixed(2) + ' each)';
+          if (p['pattern']) {
+            subtitle = p['pattern'] + ', ' + subtitle;
+          }
+
+          return {
+            title: p['title'],
+            subtitle: subtitle,
+            image_url: p['image_link'],
+            buttons: [
+              {
+                type: "postback",
+                title: "Add 1 to Cart",
+                payload: `cart_add 1 ${p['pid']} ${p['title']}`
+              }, 
+              {
+                type: "postback",
+                title: `Remove All`,
+                payload: `cart_remove_all ${p['pid']} ${p['title']}`
+              }
+            ]
+          }
+        })
+      }
+    }
+  }
+
+}
+
+function generateCheckoutResponse(order) {
+  let total_price = order.reduce((acc, p) => acc + p['price'] * p['quantity'], 0);
+
+  return {
+    attachment: {
+      type: "template",
+      payload: {
+        template_type: "button",
+        text: `Your order (including shipping) will be $${(total_price + 5).toFixed(2)}.\n\nYou will be contributing to ${Math.ceil(total_price / 5)} meals for our beneficiaries.`,
+        buttons: [
+          {
+            type: "postback",
+            title: "Proceed to Pay",
+            payload: "paid"
+          }
+        ]
+      }
+    }
+  }
+
+}
+
+async function generateReceiptResponse(sender_psid, order) {
+  let total_price = order.reduce((acc, p) => acc + p['price'] * p['quantity'], 0);
+  let name = await getName(PAGE_ACCESS_TOKEN,sender_psid);
+
+  return {
+    attachment: {
+      type: "template",
+      payload: {
+        template_type: "receipt",
+        recipient_name: name,
+        order_number: "bf23ad46d123",
+        currency: "SGD",
+        payment_method: "PayPal",
+        order_url: "",
+        address: {
+          street_1: "9 Straits View",
+          city: "Singapore",
+          postal_code: "018937",
+          state: "SG",
+          country: "SG"
+        },
+        summary: {
+          subtotal: total_price.toFixed(2),
+          shipping_cost: 5,
+          total_tax: ((total_price+5)*0.07).toFixed(2),
+          total_cost: (total_price+5).toFixed(2)
+        },
+        elements: order.map(product => {
+          return {
+            title: `${product["name"]}`,
+            title: product["title"],
+            subtitle: product["pattern"],
+            quantity: product["quantity"],
+            price: product["price"]*product["quantity"],
+            currency: "SGD",
+            image_url: product["image_link"]
+          };
+        })
+      }
+    }
+  };
+}
+
+async function getName(PAGE_ACCESS_TOKEN, sender_psid) {
+  let uri = "https://graph.facebook.com/v8.0/"
+  let response = await fetch(uri + sender_psid + "?fields=first_name&access_token=" + PAGE_ACCESS_TOKEN);
+  if (response.ok) {
+      let body = await response.json();
+      return body.first_name;
+  }
+  
+  // Returns default name if name is not able to be retrieved
+  return "John Doe";
+}
