@@ -54,7 +54,7 @@ module.exports = {
 
   // URL of your webhook endpoint
   get webhookUrl() {
-    return this.appUrl + "/webhook";
+    return "https://gentle-inlet-27756.herokuapp.com/" + "/webhook";
   },
 
   get newPersonas() {
