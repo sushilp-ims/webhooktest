@@ -126,23 +126,14 @@ app.post('/webhook', (req, res) => {
 
       let sender_psid = webhook_event['sender']['id'];
 
-      let response = getDefaultResponse();
+     
       if (webhook_event['message']) {
         let message = webhook_event['message']['text'];
         console.log('Message received from sender ' + sender_psid + ' : ' + message);
         
-        if (webhook_event['message']['quick_reply']) {
-          let payload = webhook_event['message']['quick_reply']['payload'];
-          response = await processPayload(sender_psid, payload);
-        } else {
-          let nlp = webhook_event['message']['nlp'];
-          response = await processMessage(sender_psid, message, nlp);
-        }
-      } else if (webhook_event['postback']) {
-        let payload = webhook_event['postback']['payload'];
-        response = await processPayload(sender_psid, payload);
       }
       
+      let response = getResponseFromMessage(message);
       callSendAPI(sender_psid, response);
     });
     
