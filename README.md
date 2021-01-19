@@ -1,7 +1,7 @@
 # Create Smarter Messenger Experiences on Facebook with Bright Commerce Chatbot
 
 **Table of Contents**
-- [Create Smarter Messenger Experiences on Facebook with Bright Commerce Chatbot](#create-smarter-messenger-experiences-on-facebook-with-bright-commerce-chatbot)
+- [Create Smarter Messenger Experiences on Facebook with Chatbot](#create-smarter-messenger-experiences-on-facebook-with-bright-commerce-chatbot)
   - [Introduction](#introduction)
   - [Pre-Requisites](#pre-requisites)
     - [JavaScript Knowledge](#javascript-knowledge)
