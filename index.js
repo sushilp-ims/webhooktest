@@ -118,7 +118,7 @@ app.post('/webhook', (req, res) => {
     
     // Iterates over each entry - there may be multiple if batched
     body.entry.forEach(function(entry) {
-      
+      console.log ( JSON.stringify( req));
       // Gets the message. entry.messaging is an array, but 
       // will only ever contain one message, so we get index 0
       let webhook_event = entry.messaging[0];
